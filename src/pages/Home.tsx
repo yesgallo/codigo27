@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Publicacion, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { supabase } from '../lib/supabase';
+import { Publicacion } from '../types';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Video, Headphones, FileText } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -20,61 +18,79 @@ export const Home = () => {
   const [searchParams] = useSearchParams();
   const formatoFiltro = searchParams.get('formato');
 
-  useEffect(() => {
-    let q = query(
-      collection(db, 'publicaciones'),
-      where('estado', '==', 'publicado'),
-      // orderBy requires index if combining equality and sort, wait: where('estado', '==') and orderBy('fecha_publicacion', 'desc') needs a composite index. 
-      // I will skip orderBy and sort client-side to avoid index creation requirement out of the box, or use created_at without filters.
-    );
+  const fetchPublicaciones = async () => {
+    try {
+      let query = supabase
+        .from('publicaciones')
+        .select('*, perfiles(nombre, apellido, instagram_handle)')
+        .eq('estado', 'publicado')
+        .order('fecha_publicacion', { ascending: false, nullsFirst: false });
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      try {
-        const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Publicacion));
-        
-        let validPosts = posts;
-        if (formatoFiltro) {
-          validPosts = validPosts.filter(p => p.formato === formatoFiltro);
-        }
-
-        // Sort manually by date
-        validPosts.sort((a, b) => (b.fecha_publicacion || b.created_at) - (a.fecha_publicacion || a.created_at));
-
-        // Fetch authors - normally cache this but will do per render for simplicity
-        const userIds = [...new Set(validPosts.map(p => p.estudiante_id))];
-        
-        // chunk fetch users if many
-        const authorMap: Record<string, {nombre: string, handle: string}> = {};
-        for(const uId of userIds) {
-          const uDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', uId)));
-          if(!uDoc.empty) {
-            authorMap[uId] = { nombre: uDoc.docs[0].data().nombre + ' ' + uDoc.docs[0].data().apellido, handle: uDoc.docs[0].data().instagram_handle };
-          }
-        }
-
-        setPublicaciones(validPosts.map(p => ({
-          ...p,
-          autorNombre: p.autorNombre_demo || authorMap[p.estudiante_id]?.nombre || 'Autor Anónimo',
-          autorHandle: authorMap[p.estudiante_id]?.handle
-        })));
-        setLoading(false);
-      } catch (e) {
-        setLoading(false);
-        handleFirestoreError(e, OperationType.LIST, 'publicaciones');
+      if (formatoFiltro) {
+        query = query.eq('formato', formatoFiltro);
       }
-    }, (error) => {
-      setLoading(false);
-      console.error(error);
-    });
 
-    return () => unsubscribe();
+      const { data, error } = await query;
+
+      if (error && error.code !== 'PGRST200') {
+        console.error('Error fetching publicaciones:', error);
+        setLoading(false);
+        return;
+      }
+      
+      let finalData = data;
+      if (error?.code === 'PGRST200') {
+        let fallbackQuery = supabase.from('publicaciones').select('*').eq('estado', 'publicado').order('fecha_publicacion', { ascending: false, nullsFirst: false });
+        if (formatoFiltro) fallbackQuery = fallbackQuery.eq('formato', formatoFiltro);
+        const fallback = await fallbackQuery;
+        if (fallback.error) {
+          console.error('Fallback query failed:', fallback.error);
+        }
+        finalData = fallback.data;
+      }
+
+      const posts = (finalData || []).map((p: any) => ({
+        ...p,
+        autorNombre: p.autor_nombre_demo || 
+          (p.perfiles ? `${p.perfiles.nombre} ${p.perfiles.apellido}` : 'Autor Anónimo'),
+        autorHandle: p.perfiles?.instagram_handle || '',
+      }));
+
+      setPublicaciones(posts);
+      setLoading(false);
+    } catch (e) {
+      console.error(e);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPublicaciones();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel('publicaciones_home')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'publicaciones', filter: 'estado=eq.publicado' },
+        () => {
+          fetchPublicaciones();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [formatoFiltro]);
 
   if (loading) {
     return <div className="p-8 text-center text-gray-500">Cargando publicaciones...</div>;
   }
 
-  const [destacada, ...resto] = publicaciones;
+  const indexDestacada = publicaciones.findIndex(p => p.imagen_portada && p.imagen_portada.trim() !== '');
+  const destacada = indexDestacada !== -1 ? publicaciones[indexDestacada] : publicaciones[0];
+  const resto = publicaciones.filter((_, idx) => idx !== (indexDestacada !== -1 ? indexDestacada : 0));
 
   return (
     <div className="flex-1 flex flex-col md:flex-row gap-1 p-1 bg-gray-200 h-full overflow-hidden">
@@ -86,7 +102,7 @@ export const Home = () => {
       ) : (
         <>
           {/* LEFT: Featured Story */}
-          <div className="md:w-2/3 flex flex-col bg-white overflow-hidden relative group cursor-pointer h-[50vh] md:h-full">
+          <div className="md:w-2/3 flex flex-col bg-white overflow-hidden relative group cursor-pointer min-h-[50vh] md:min-h-[600px] h-full">
             {destacada ? (
               <Link to={`/publicacion/${destacada.id}`} className="block h-full w-full bg-gray-300 relative">
                 {destacada.imagen_portada ? (
@@ -110,7 +126,7 @@ export const Home = () => {
                     <p className="text-xs md:text-sm font-bold opacity-80 uppercase">Por {destacada.autorNombre}</p>
                     <span className="h-1 w-1 bg-[#E63946] rounded-full hidden md:block"></span>
                     <p className="text-xs md:text-sm opacity-60 uppercase tracking-widest hidden md:block">
-                      {formatDistanceToNow(destacada.fecha_publicacion || destacada.created_at, { addSuffix: true, locale: es })}
+                      {formatDistanceToNow(new Date(destacada.fecha_publicacion || destacada.created_at), { addSuffix: true, locale: es })}
                     </p>
                   </div>
                   <div className="mt-6 flex gap-2">
@@ -143,7 +159,7 @@ export const Home = () => {
                 <div className="flex justify-between items-center mt-4 border-t border-gray-100 pt-4">
                   <p className="text-[10px] font-bold uppercase text-gray-400">Por {pub.autorNombre}</p>
                   <p className="text-[10px] font-bold uppercase text-gray-400">
-                     {formatDistanceToNow(pub.fecha_publicacion || pub.created_at, { addSuffix: false, locale: es })}
+                     {formatDistanceToNow(new Date(pub.fecha_publicacion || pub.created_at), { addSuffix: false, locale: es })}
                   </p>
                 </div>
               </Link>

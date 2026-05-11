@@ -1,41 +1,48 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Publicacion, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { supabase } from '../lib/supabase';
+import { Publicacion } from '../types';
 import { MediaEmulador } from '../components/MediaEmulador';
 import { BarraReacciones } from '../components/BarraReacciones';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-
 import { ArrowLeft } from 'lucide-react';
 
 export const PostDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const [pub, setPub] = useState<Publicacion & { autorNombre?: string, autorHandle?: string } | null>(null);
+  const [pub, setPub] = useState<Publicacion & { autorNombre?: string; autorHandle?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     const fetchPost = async () => {
       try {
-        const d = await getDoc(doc(db, 'publicaciones', id));
-        if (d.exists()) {
-          const data = d.data() as Publicacion;
-          
-          let autorNombre = data.autorNombre_demo || 'Autor Anónimo';
-          let autorHandle = '';
-          const uDoc = await getDoc(doc(db, 'users', data.estudiante_id));
-          if(uDoc.exists()) {
-            if (!data.autorNombre_demo) autorNombre = `${uDoc.data().nombre} ${uDoc.data().apellido}`;
-            autorHandle = uDoc.data().instagram_handle || '';
-          }
+        const { data, error } = await supabase
+          .from('publicaciones')
+          .select('*, perfiles(nombre, apellido, instagram_handle)')
+          .eq('id', id)
+          .single();
 
-          setPub({ id: d.id, ...data, autorNombre, autorHandle });
+        if (error && error.code !== 'PGRST200') {
+          console.error('Error fetching post:', error);
+          setLoading(false);
+          return;
+        }
+
+        let finalData = data;
+        if (error?.code === 'PGRST200') {
+          const fallback = await supabase.from('publicaciones').select('*').eq('id', id).single();
+          finalData = fallback.data;
+        }
+
+        if (finalData) {
+          const autorNombre = finalData.autor_nombre_demo ||
+            (finalData.perfiles ? `${finalData.perfiles.nombre} ${finalData.perfiles.apellido}` : 'Autor Anónimo');
+          const autorHandle = finalData.perfiles?.instagram_handle || '';
+          setPub({ ...finalData, autorNombre, autorHandle });
         }
       } catch (e) {
-        handleFirestoreError(e, OperationType.GET, `publicaciones/${id}`);
+        console.error(e);
       } finally {
         setLoading(false);
       }
@@ -71,7 +78,7 @@ export const PostDetail = () => {
              <div className="flex items-center gap-2">
                <span className="h-1 w-1 bg-[#E63946] rounded-full"></span>
                <time className="text-gray-400">
-                 {format(pub.fecha_publicacion, "d MMM yyyy", { locale: es })}
+                 {format(new Date(pub.fecha_publicacion), "d MMM yyyy", { locale: es })}
                </time>
              </div>
           )}
@@ -95,7 +102,7 @@ export const PostDetail = () => {
       )}
 
       {pub.cuerpo && (
-        <div className="max-w-2xl mx-auto mb-16 text-lg text-[#1A1A1A] leading-relaxed font-medium" dangerouslySetInnerHTML={{ __html: pub.cuerpo.replace(/\n      /g, '<br/>') }} />
+        <div className="max-w-2xl mx-auto mb-16 text-lg text-[#1A1A1A] leading-relaxed font-medium" dangerouslySetInnerHTML={{ __html: pub.cuerpo.replace(/\n/g, '<br/>') }} />
       )}
 
       <footer className="mt-16 pt-10 border-t-2 border-black flex flex-col items-center">

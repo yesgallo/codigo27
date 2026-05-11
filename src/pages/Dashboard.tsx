@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, onSnapshot, orderBy, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Publicacion, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { supabase } from '../lib/supabase';
+import { Publicacion } from '../types';
 import { Link, Navigate } from 'react-router-dom';
 import { PenSquare, Clock, CheckCircle, AlertCircle, PlusCircle, ArrowLeft, Trash2 } from 'lucide-react';
 
@@ -18,40 +16,45 @@ export const Dashboard = () => {
   const [publicaciones, setPublicaciones] = useState<Publicacion[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchPublicaciones = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('publicaciones')
+      .select('*')
+      .eq('estudiante_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching publicaciones:', error);
+    } else {
+      setPublicaciones(data || []);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, 'publicaciones'), 
-      where('estudiante_id', '==', user.uid)
-    );
+    fetchPublicaciones();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      try {
-        const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Publicacion));
-        posts.sort((a,b) => b.created_at - a.created_at);
-        setPublicaciones(posts);
-        setLoading(false);
-      } catch (e) {
-        setLoading(false);
-        handleFirestoreError(e, OperationType.LIST, 'publicaciones');
-      }
-    }, (err) => {
-      setLoading(false);
-      console.error(err);
-    });
+    const channel = supabase
+      .channel('dashboard_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'publicaciones', filter: `estudiante_id=eq.${user.id}` },
+        () => fetchPublicaciones()
+      )
+      .subscribe();
 
-    return () => unsubscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
     if (confirm('¿Estás seguro de que deseas eliminar este borrador? Esta acción no se puede deshacer.')) {
-      try {
-        await deleteDoc(doc(db, 'publicaciones', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, 'publicaciones');
-      }
+      const { error } = await supabase.from('publicaciones').delete().eq('id', id);
+      if (error) console.error('Error deleting:', error);
+      else fetchPublicaciones();
     }
   };
 
@@ -115,7 +118,7 @@ export const Dashboard = () => {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-[#E63946]">{pub.formato}</span>
                         {pub.estado === 'publicado' && (
                           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 border-l border-gray-200 pl-3">
-                            {new Date(pub.fecha_publicacion || pub.created_at).toLocaleDateString()}
+                            {pub.fecha_publicacion ? new Date(pub.fecha_publicacion).toLocaleDateString() : ''}
                           </span>
                         )}
                       </div>
@@ -128,7 +131,7 @@ export const Dashboard = () => {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-gray-400 group-hover:text-black transition-colors shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-3 text-gray-400 shrink-0" onClick={(e) => e.stopPropagation()}>
                        <Link to={`/editor/${pub.id}`} className="flex items-center gap-1 text-gray-600 hover:text-black hover:bg-gray-200 bg-gray-100 px-3 py-2 rounded-md transition text-[10px] font-bold uppercase tracking-widest">
                          <PenSquare className="w-4 h-4" /> Editar
                        </Link>

@@ -1,67 +1,122 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
-import { UserProfile, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
+import { UserProfile } from '../types';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   profile: null,
   loading: true,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        try {
-          const docRef = doc(db, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
-          } else {
-            // Check if bootstrap admin
-            const isAdminAcc = firebaseUser.email === 'yesicalp@gmail.com' && firebaseUser.emailVerified;
-            
-            // Auto prompt or auto create profile.
-            // Let's create a minimal staff profile
-            const newProfile: Omit<UserProfile, 'id'> = {
-              nombre: firebaseUser.displayName?.split(' ')[0] || 'Nuevo',
-              apellido: firebaseUser.displayName?.split(' ').slice(1).join(' ') || 'Usuario',
-              rol: isAdminAcc ? 'admin' : 'staff',
-              estado_cuenta: isAdminAcc ? 'aprobado' : 'pendiente',
-            };
-            
-            await setDoc(docRef, newProfile);
-            setProfile({ id: firebaseUser.uid, ...newProfile } as UserProfile);
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+  const fetchOrCreateProfile = async (supabaseUser: User) => {
+    try {
+      // Try to fetch existing profile
+      const { data, error } = await supabase
+        .from('perfiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (data) {
+        const p = data as UserProfile;
+        if (supabaseUser.email === 'yesicalp@gmail.com') {
+          p.rol = 'admin';
+          p.estado_cuenta = 'aprobado';
         }
-      } else {
-        setProfile(null);
+        setProfile(p);
+        return;
       }
-      setLoading(false);
+
+      // Profile not found (trigger may have failed) — create it from frontend
+      if (error?.code === 'PGRST116') {
+        const isAdmin = supabaseUser.email === 'yesicalp@gmail.com';
+        const meta = supabaseUser.user_metadata || {};
+        const emailPrefix = supabaseUser.email?.split('@')[0] || 'Usuario';
+
+        const newProfile = {
+          id: supabaseUser.id,
+          nombre: meta.nombre || emailPrefix,
+          apellido: meta.apellido || '-',
+          rol: isAdmin ? 'admin' : 'staff',
+          estado_cuenta: isAdmin ? 'aprobado' : 'pendiente',
+        };
+
+        const { data: created, error: createError } = await supabase
+          .from('perfiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+        } else if (created) {
+          setProfile(created as UserProfile);
+        }
+        return;
+      }
+
+      console.error('Error fetching profile:', error);
+      // Fallback for admin if DB fails
+      if (supabaseUser.email === 'yesicalp@gmail.com') {
+        setProfile({
+          id: supabaseUser.id,
+          nombre: 'Yesica',
+          apellido: 'LP',
+          rol: 'admin',
+          estado_cuenta: 'aprobado'
+        });
+      }
+    } catch (err) {
+      console.error('Unexpected error in fetchOrCreateProfile:', err);
+    }
+  };
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      if (s?.user) {
+        fetchOrCreateProfile(s.user).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, s) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          await fetchOrCreateProfile(s.user);
+        } else {
+          setProfile(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading }}>
+    <AuthContext.Provider value={{ user, session, profile, loading }}>
       {children}
     </AuthContext.Provider>
   );

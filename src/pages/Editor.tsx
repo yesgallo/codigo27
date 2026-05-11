@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useForm, Controller } from 'react-hook-form';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Formato, OperationType, Publicacion } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
-import { ArrowLeft, Save, Send } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { supabase } from '../lib/supabase';
+import { Formato, Publicacion } from '../types';
+import { ArrowLeft, Save } from 'lucide-react';
 import { MediaEmulador } from '../components/MediaEmulador';
 
 type FormData = {
@@ -20,12 +18,12 @@ type FormData = {
 export const Editor = () => {
   const { id } = useParams<{ id: string }>();
   const isNew = id === 'new';
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(!isNew);
   const [pub, setPub] = useState<Publicacion | null>(null);
 
-  const { register, handleSubmit, watch, control, reset, setValue } = useForm<FormData>({
+  const { register, handleSubmit, watch, reset } = useForm<FormData>({
     defaultValues: { formato: 'texto', titulo: '', media_url: '', cuerpo: '', imagen_portada: '' }
   });
 
@@ -36,66 +34,74 @@ export const Editor = () => {
     if (!isNew && id) {
       const fetchDoc = async () => {
         try {
-          const d = await getDoc(doc(db, 'publicaciones', id));
-          if (d.exists()) {
-            const data = d.data() as Publicacion;
-            if (data.estudiante_id !== user?.uid && user?.email !== 'yesicalp@gmail.com') { // simple client guard
-              navigate('/dashboard');
-              return;
-            }
-            setPub({ id: d.id, ...data });
-            reset({
-              titulo: data.titulo,
-              formato: data.formato,
-              cuerpo: data.cuerpo || '',
-              media_url: data.media_url || '',
-              imagen_portada: data.imagen_portada || ''
-            });
-          } else {
-             navigate('/dashboard');
+          const { data, error } = await supabase
+            .from('publicaciones')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          if (error || !data) {
+            navigate('/dashboard');
+            return;
           }
+
+          // Check ownership (client guard)
+          if (data.estudiante_id !== user?.id && profile?.rol !== 'admin') {
+            navigate('/dashboard');
+            return;
+          }
+
+          setPub(data as Publicacion);
+          reset({
+            titulo: data.titulo,
+            formato: data.formato,
+            cuerpo: data.cuerpo || '',
+            media_url: data.media_url || '',
+            imagen_portada: data.imagen_portada || ''
+          });
         } catch (e) {
-          handleFirestoreError(e, OperationType.GET, `publicaciones/${id}`);
+          console.error(e);
+          navigate('/dashboard');
         } finally {
           setLoading(false);
         }
       };
       fetchDoc();
     }
-  }, [id, isNew, navigate, reset, user]);
+  }, [id, isNew, navigate, reset, user, profile]);
 
   const onSubmit = async (data: FormData) => {
     if (!user) return;
     try {
-      const docId = isNew ? crypto.randomUUID() : id!;
-      const docRef = doc(db, 'publicaciones', docId);
-
       if (isNew) {
-        await setDoc(docRef, {
+        const { error } = await supabase.from('publicaciones').insert({
           titulo: data.titulo,
           formato: data.formato,
           cuerpo: data.formato === 'texto' ? data.cuerpo : '',
           media_url: (data.formato === 'video' || data.formato === 'audio') ? data.media_url : '',
           imagen_portada: data.imagen_portada,
           estado: 'borrador',
-          estudiante_id: user.uid,
-          created_at: Date.now(),
+          estudiante_id: user.id,
         });
+        if (error) throw error;
       } else {
-        await updateDoc(docRef, {
-          titulo: data.titulo,
-          formato: data.formato,
-          cuerpo: data.formato === 'texto' ? data.cuerpo : '',
-          media_url: (data.formato === 'video' || data.formato === 'audio') ? data.media_url : '',
-          imagen_portada: data.imagen_portada,
-          updated_at: Date.now()
-          // estado remains the same, if observed they update the fields, maybe they change it to pending? 
-          // The spec says student acts as redactant, admin publishes. If it's observed and edited, does it remain observed until admin checks? Yes.
-        });
+        const { error } = await supabase
+          .from('publicaciones')
+          .update({
+            titulo: data.titulo,
+            formato: data.formato,
+            cuerpo: data.formato === 'texto' ? data.cuerpo : '',
+            media_url: (data.formato === 'video' || data.formato === 'audio') ? data.media_url : '',
+            imagen_portada: data.imagen_portada,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id!);
+        if (error) throw error;
       }
       navigate('/dashboard');
     } catch (e) {
-      handleFirestoreError(e, isNew ? OperationType.CREATE : OperationType.UPDATE, `publicaciones`);
+      console.error('Error saving:', e);
+      alert('Error al guardar. Intenta de nuevo.');
     }
   };
 

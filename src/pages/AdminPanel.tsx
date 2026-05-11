@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Publicacion, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { supabase } from '../lib/supabase';
+import { Publicacion, UserProfile } from '../types';
 import { Link, Navigate } from 'react-router-dom';
-import { Check, MessageSquare, AlertCircle, Eye, Database, ArrowLeft, UserCheck, UserX, Trash2 } from 'lucide-react';
+import { Check, AlertCircle, Eye, Database, ArrowLeft, UserCheck, UserX, Trash2 } from 'lucide-react';
 
 const SEED_DATA = [
   {
@@ -43,47 +41,69 @@ const SEED_DATA = [
 export const AdminPanel = () => {
   const { user, profile } = useAuth();
   const [publicaciones, setPublicaciones] = useState<(Publicacion & { autorNombre?: string })[]>([]);
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [comentarioActivo, setComentarioActivo] = useState<{ id: string, texto: string } | null>(null);
+
+  const fetchPublicaciones = async () => {
+    // Intentamos hacer el join, si PostgREST no lo tiene cacheado, traemos sin el join
+    let finalData: any[] | null = null;
+    
+    const { data, error } = await supabase
+      .from('publicaciones')
+      .select('*, perfiles(nombre, apellido)')
+      .order('created_at', { ascending: false });
+
+    if (error && error.code !== 'PGRST200') {
+      console.error('Error fetching publicaciones:', error);
+    }
+    
+    // Si falló por PGRST200 (FK no encontrada en cache), hacemos fallback query
+    if (error?.code === 'PGRST200') {
+      const fallback = await supabase.from('publicaciones').select('*').order('created_at', { ascending: false });
+      finalData = fallback.data;
+    } else {
+      finalData = data;
+    }
+
+    setPublicaciones((finalData || []).map((p: any) => ({
+      ...p,
+      autorNombre: p.autor_nombre_demo || 
+        (p.perfiles ? `${p.perfiles.nombre} ${p.perfiles.apellido}` : 'Autor Anónimo'),
+    })));
+  };
+
+  const fetchUsuarios = async () => {
+    const { data, error } = await supabase.from('perfiles').select('*');
+    if (error) {
+      console.error('Error fetching usuarios:', error);
+      return;
+    }
+    setUsuarios(data || []);
+  };
 
   useEffect(() => {
     if (!user || profile?.rol !== 'admin') return;
 
-    const q = query(collection(db, 'publicaciones'));
-    const unsubscribePubs = onSnapshot(q, async (snapshot) => {
-      try {
-        const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Publicacion));
-        posts.sort((a,b) => b.created_at - a.created_at);
+    const init = async () => {
+      await Promise.all([fetchPublicaciones(), fetchUsuarios()]);
+      setLoading(false);
+    };
+    init();
 
-        const userIds = [...new Set(posts.map(p => p.estudiante_id))];
-        const authorMap: Record<string, string> = {};
-        for(const uId of userIds) {
-          const uDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', uId)));
-          if(!uDoc.empty) {
-            authorMap[uId] = uDoc.docs[0].data().nombre + ' ' + uDoc.docs[0].data().apellido;
-          }
-        }
+    const pubChannel = supabase
+      .channel('admin_publicaciones')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'publicaciones' }, () => fetchPublicaciones())
+      .subscribe();
 
-        setPublicaciones(posts.map(p => ({
-          ...p,
-          autorNombre: p.autorNombre_demo || authorMap[p.estudiante_id] || 'Autor Anónimo',
-        })));
-        setLoading(false);
-      } catch (e) {
-        setLoading(false);
-        handleFirestoreError(e, OperationType.LIST, 'publicaciones');
-      }
-    });
-
-    const qUsers = query(collection(db, 'users'));
-    const unsubscribeUsers = onSnapshot(qUsers, (snap) => {
-       setUsuarios(snap.docs.map(d => ({id: d.id, ...d.data()})));
-    });
+    const userChannel = supabase
+      .channel('admin_usuarios')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'perfiles' }, () => fetchUsuarios())
+      .subscribe();
 
     return () => {
-      unsubscribePubs();
-      unsubscribeUsers();
+      supabase.removeChannel(pubChannel);
+      supabase.removeChannel(userChannel);
     };
   }, [user, profile]);
 
@@ -100,45 +120,40 @@ export const AdminPanel = () => {
   const usuariosPendientes = usuarios.filter(u => u.estado_cuenta === 'pendiente');
 
   const handleUpdateUserStatus = async (userId: string, nuevoEstado: 'aprobado' | 'rechazado') => {
-    try {
-      await updateDoc(doc(db, 'users', userId), { estado_cuenta: nuevoEstado });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
-    }
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ estado_cuenta: nuevoEstado })
+      .eq('id', userId);
+    if (error) console.error('Error updating user:', error);
   };
 
   const handleUpdateEstado = async (id: string, nuevoEstado: 'publicado' | 'observado' | 'borrador', comentario?: string) => {
-    try {
-      const updateData: any = { 
-        estado: nuevoEstado 
-      };
-      
-      if (nuevoEstado === 'publicado') {
-        updateData.fecha_publicacion = Date.now();
-      }
-      
-      if (comentario !== undefined) {
-        updateData.comentario_docente = comentario;
-      }
+    const updateData: any = { estado: nuevoEstado };
+    
+    if (nuevoEstado === 'publicado') {
+      updateData.fecha_publicacion = new Date().toISOString();
+    }
+    
+    if (comentario !== undefined) {
+      updateData.comentario_docente = comentario;
+    }
 
-      const docRef = doc(db, 'publicaciones', id);
-      await updateDoc(docRef, updateData);
-      
-      if (comentarioActivo?.id === id) {
-        setComentarioActivo(null);
-      }
-    } catch (e) {
-        handleFirestoreError(e, OperationType.UPDATE, `publicaciones/${id}`);
+    const { error } = await supabase
+      .from('publicaciones')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating estado:', error);
+    } else if (comentarioActivo?.id === id) {
+      setComentarioActivo(null);
     }
   };
 
   const handleDeletePost = async (id: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar esta publicación permanentemente?')) {
-      try {
-        await deleteDoc(doc(db, 'publicaciones', id));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `publicaciones/${id}`);
-      }
+      const { error } = await supabase.from('publicaciones').delete().eq('id', id);
+      if (error) console.error('Error deleting:', error);
     }
   };
 
@@ -146,28 +161,22 @@ export const AdminPanel = () => {
     if (!user) return;
     try {
       setLoading(true);
-      for (const item of SEED_DATA) {
-        const docId = crypto.randomUUID();
-        const docRef = doc(db, 'publicaciones', docId);
-        await setDoc(docRef, {
-          titulo: item.titulo,
-          cuerpo: item.cuerpo,
-          imagen_portada: item.imagen_portada,
-          formato: 'texto',
-          estado: 'borrador',
-          estudiante_id: user.uid,
-          autorNombre_demo: item.autorNombre,
-          created_at: Date.now()
-        });
-        await updateDoc(docRef, {
-          estado: 'publicado',
-          fecha_publicacion: Date.now()
-        });
-      }
-    } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, 'publicaciones');
+      const inserts = SEED_DATA.map(item => ({
+        titulo: item.titulo,
+        cuerpo: item.cuerpo,
+        imagen_portada: item.imagen_portada,
+        formato: 'texto' as const,
+        estado: 'publicado' as const,
+        estudiante_id: user.id,
+        autor_nombre_demo: item.autorNombre,
+        fecha_publicacion: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from('publicaciones').insert(inserts);
+      if (error) console.error('Error seeding:', error);
     } finally {
       setLoading(false);
+      fetchPublicaciones();
     }
   };
 

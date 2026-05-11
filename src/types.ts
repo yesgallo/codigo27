@@ -1,29 +1,3 @@
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  }
-}
-
 export type Role = 'staff' | 'admin';
 
 export interface UserProfile {
@@ -33,6 +7,7 @@ export interface UserProfile {
   instagram_handle?: string;
   rol: Role;
   estado_cuenta?: 'pendiente' | 'aprobado' | 'rechazado';
+  created_at?: string;
 }
 
 export type Formato = 'texto' | 'video' | 'audio';
@@ -48,24 +23,24 @@ export interface Publicacion {
   estado: Estado;
   comentario_docente?: string;
   estudiante_id: string;
-  fecha_publicacion?: number;
-  created_at: number;
-  updated_at?: number;
-  autorNombre_demo?: string;
+  autor_nombre_demo?: string;
   total_reacciones?: number;
-  estadisticas?: {
-    reacciones_interesa?: number;
-    reacciones_enoja?: number;
-    reacciones_alegra?: number;
-    reacciones_entristece?: number;
-    reacciones_piensa?: number;
+  fecha_publicacion?: string;
+  created_at: string;
+  updated_at?: string;
+  // Joined from perfiles
+  perfiles?: {
+    nombre: string;
+    apellido: string;
+    instagram_handle?: string;
   };
 }
 
 export type TipoReaccion = 'interesa' | 'enoja' | 'alegra' | 'entristece' | 'piensa';
 
 export interface Reaccion {
-  id: string;
+  id: number;
+  publicacion_id: string;
   tipo: TipoReaccion;
-  created_at: number;
+  created_at: string;
 }

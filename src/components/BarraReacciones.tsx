@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
-import { doc, collection, setDoc, query, onSnapshot, increment, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { TipoReaccion, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/errorHandler';
+import { supabase } from '../lib/supabase';
+import { TipoReaccion } from '../types';
 import { cn } from '../lib/utils';
-import { useAuth } from '../contexts/AuthContext';
 
 const REACCIONES: { tipo: TipoReaccion; emoji: string; label: string }[] = [
   { tipo: 'interesa', emoji: '💡', label: 'Me interesa' },
@@ -20,25 +17,43 @@ export const BarraReacciones: React.FC<{ publicacionId: string }> = ({ publicaci
   });
   const [votedType, setVotedType] = useState<TipoReaccion | null>(null);
 
-  React.useEffect(() => {
-    // Escucha real time reactions para agregar la cuenta. (For simple app, just count total client-side, limit is 100 on snapshots maybe, but for this scale it's ok. Actually we should use aggregations or counter).
-    // Using simple snapshot for this MVP scope. In prod, use an aggregated field via Edge Function or sum.
-    const q = query(collection(db, 'publicaciones', publicacionId, 'reacciones'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newCounts = { interesa: 0, enoja: 0, alegra: 0, entristece: 0, piensa: 0 };
-      snapshot.docs.forEach(d => {
-        const tipo = d.data().tipo as TipoReaccion;
-        if (newCounts[tipo] !== undefined) {
-          newCounts[tipo]++;
-        }
-      });
-      setCounts(newCounts);
-    }, (error) => {
-      // In case they read unauth without proper rules, but read is public so it's fine.
-      console.error(error);
-    });
+  const fetchCounts = async () => {
+    const { data, error } = await supabase
+      .from('reacciones')
+      .select('tipo')
+      .eq('publicacion_id', publicacionId);
 
-    return () => unsubscribe();
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const newCounts: Record<TipoReaccion, number> = { interesa: 0, enoja: 0, alegra: 0, entristece: 0, piensa: 0 };
+    (data || []).forEach((r: any) => {
+      const tipo = r.tipo as TipoReaccion;
+      if (newCounts[tipo] !== undefined) {
+        newCounts[tipo]++;
+      }
+    });
+    setCounts(newCounts);
+  };
+
+  React.useEffect(() => {
+    fetchCounts();
+
+    // Realtime subscription for reactions
+    const channel = supabase
+      .channel(`reacciones_${publicacionId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'reacciones', filter: `publicacion_id=eq.${publicacionId}` },
+        () => fetchCounts()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [publicacionId]);
 
   const handleVote = async (tipo: TipoReaccion) => {
@@ -48,16 +63,16 @@ export const BarraReacciones: React.FC<{ publicacionId: string }> = ({ publicaci
     setVotedType(tipo);
 
     try {
-      const newRef = doc(collection(db, 'publicaciones', publicacionId, 'reacciones'));
-      await setDoc(newRef, {
-        tipo,
-        created_at: Date.now()
-      });
-      await updateDoc(doc(db, 'publicaciones', publicacionId), {
-        total_reacciones: increment(1)
-      });
+      const { error: insertError } = await supabase
+        .from('reacciones')
+        .insert({ publicacion_id: publicacionId, tipo });
+
+      if (insertError) throw insertError;
+
+      // Increment counter via RPC
+      await supabase.rpc('incrementar_reaccion', { pub_id: publicacionId });
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, `publicaciones/${publicacionId}/reacciones`);
+      console.error('Error adding reaction:', e);
       setVotedType(null); // Revert
     }
   };
