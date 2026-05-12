@@ -46,31 +46,24 @@ export const AdminPanel = () => {
   const [comentarioActivo, setComentarioActivo] = useState<{ id: string, texto: string } | null>(null);
 
   const fetchPublicaciones = async () => {
-    // Intentamos hacer el join, si PostgREST no lo tiene cacheado, traemos sin el join
-    let finalData: any[] | null = null;
-    
-    const { data, error } = await supabase
-      .from('publicaciones')
-      .select('*, perfiles(nombre, apellido)')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('publicaciones')
+        .select('*, perfiles(nombre, apellido)')
+        .order('created_at', { ascending: false });
 
-    if (error && error.code !== 'PGRST200') {
-      console.error('Error fetching publicaciones:', error);
-    }
-    
-    // Si falló por PGRST200 (FK no encontrada en cache), hacemos fallback query
-    if (error?.code === 'PGRST200') {
-      const fallback = await supabase.from('publicaciones').select('*').order('created_at', { ascending: false });
-      finalData = fallback.data;
-    } else {
-      finalData = data;
-    }
+      if (error) {
+        console.error('Error fetching publicaciones:', error);
+      }
 
-    setPublicaciones((finalData || []).map((p: any) => ({
-      ...p,
-      autorNombre: p.autor_nombre_demo || 
-        (p.perfiles ? `${p.perfiles.nombre} ${p.perfiles.apellido}` : 'Autor Anónimo'),
-    })));
+      setPublicaciones((data || []).map((p: any) => ({
+        ...p,
+        autorNombre: p.autor_nombre_demo || 
+          (p.perfiles ? `${p.perfiles.nombre} ${p.perfiles.apellido}` : 'Autor Anónimo'),
+      })));
+    } catch (e) {
+      console.error('Unexpected error fetching publicaciones:', e);
+    }
   };
 
   const fetchUsuarios = async () => {
@@ -86,18 +79,25 @@ export const AdminPanel = () => {
     if (!user || profile?.rol !== 'admin') return;
 
     const init = async () => {
-      await Promise.all([fetchPublicaciones(), fetchUsuarios()]);
-      setLoading(false);
+      try {
+        await Promise.all([fetchPublicaciones(), fetchUsuarios()]);
+      } catch (error) {
+        console.error('Error during init:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     init();
 
+    const pubChannelId = `admin_pub_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const pubChannel = supabase
-      .channel('admin_publicaciones')
+      .channel(pubChannelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'publicaciones' }, () => fetchPublicaciones())
       .subscribe();
 
+    const userChannelId = `admin_user_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const userChannel = supabase
-      .channel('admin_usuarios')
+      .channel(userChannelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'perfiles' }, () => fetchUsuarios())
       .subscribe();
 

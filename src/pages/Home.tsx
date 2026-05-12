@@ -32,24 +32,11 @@ export const Home = () => {
 
       const { data, error } = await query;
 
-      if (error && error.code !== 'PGRST200') {
+      if (error) {
         console.error('Error fetching publicaciones:', error);
-        setLoading(false);
-        return;
       }
       
-      let finalData = data;
-      if (error?.code === 'PGRST200') {
-        let fallbackQuery = supabase.from('publicaciones').select('*').eq('estado', 'publicado').order('fecha_publicacion', { ascending: false, nullsFirst: false });
-        if (formatoFiltro) fallbackQuery = fallbackQuery.eq('formato', formatoFiltro);
-        const fallback = await fallbackQuery;
-        if (fallback.error) {
-          console.error('Fallback query failed:', fallback.error);
-        }
-        finalData = fallback.data;
-      }
-
-      const posts = (finalData || []).map((p: any) => ({
+      const posts = (data || []).map((p: any) => ({
         ...p,
         autorNombre: p.autor_nombre_demo || 
           (p.perfiles ? `${p.perfiles.nombre} ${p.perfiles.apellido}` : 'Autor Anónimo'),
@@ -57,9 +44,9 @@ export const Home = () => {
       }));
 
       setPublicaciones(posts);
-      setLoading(false);
     } catch (e) {
-      console.error(e);
+      console.error('Unexpected error fetching publicaciones:', e);
+    } finally {
       setLoading(false);
     }
   };
@@ -68,8 +55,9 @@ export const Home = () => {
     fetchPublicaciones();
 
     // Realtime subscription
+    const channelId = `publicaciones_home_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const channel = supabase
-      .channel('publicaciones_home')
+      .channel(channelId)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'publicaciones', filter: 'estado=eq.publicado' },
@@ -116,7 +104,7 @@ export const Home = () => {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90"></div>
                 <div className="absolute top-6 left-6">
-                  <span className="bg-[#E63946] text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">En Portada</span>
+                  <span className="bg-[#E63946] text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">Publicación más reciente</span>
                 </div>
                 <div className="absolute bottom-6 md:bottom-10 left-6 md:left-10 right-6 md:right-10">
                   <h2 className="text-3xl md:text-5xl font-black text-white leading-[1.1] mb-4 tracking-tight uppercase italic group-hover:text-red-400 transition-colors">

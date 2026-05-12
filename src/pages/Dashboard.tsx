@@ -36,8 +36,9 @@ export const Dashboard = () => {
     if (!user) return;
     fetchPublicaciones();
 
+    const channelId = `dashboard_realtime_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const channel = supabase
-      .channel('dashboard_realtime')
+      .channel(channelId)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'publicaciones', filter: `estudiante_id=eq.${user.id}` },

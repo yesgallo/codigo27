@@ -99,9 +99,9 @@ export const Editor = () => {
         if (error) throw error;
       }
       navigate('/dashboard');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error saving:', e);
-      alert('Error al guardar. Intenta de nuevo.');
+      alert('Error al guardar: ' + (e?.message || JSON.stringify(e)));
     }
   };
 

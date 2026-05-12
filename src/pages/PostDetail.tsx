@@ -23,26 +23,20 @@ export const PostDetail = () => {
           .eq('id', id)
           .single();
 
-        if (error && error.code !== 'PGRST200') {
+        if (error) {
           console.error('Error fetching post:', error);
           setLoading(false);
           return;
         }
 
-        let finalData = data;
-        if (error?.code === 'PGRST200') {
-          const fallback = await supabase.from('publicaciones').select('*').eq('id', id).single();
-          finalData = fallback.data;
-        }
-
-        if (finalData) {
-          const autorNombre = finalData.autor_nombre_demo ||
-            (finalData.perfiles ? `${finalData.perfiles.nombre} ${finalData.perfiles.apellido}` : 'Autor Anónimo');
-          const autorHandle = finalData.perfiles?.instagram_handle || '';
-          setPub({ ...finalData, autorNombre, autorHandle });
+        if (data) {
+          const autorNombre = data.autor_nombre_demo ||
+            (data.perfiles ? `${data.perfiles.nombre} ${data.perfiles.apellido}` : 'Autor Anónimo');
+          const autorHandle = data.perfiles?.instagram_handle || '';
+          setPub({ ...data, autorNombre, autorHandle });
         }
       } catch (e) {
-        console.error(e);
+        console.error('Unexpected error fetching post:', e);
       } finally {
         setLoading(false);
       }
