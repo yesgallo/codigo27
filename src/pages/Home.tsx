@@ -76,103 +76,49 @@ export const Home = () => {
     return <div className="p-8 text-center text-gray-500">Cargando publicaciones...</div>;
   }
 
-  const getImageUrl = (p: any) => {
-    if (p.imagen_portada && p.imagen_portada.trim() !== '') return p.imagen_portada;
-    if (p.formato === 'video' && p.media_url) {
-      try {
-        let videoId = '';
-        if (p.media_url.includes('youtu.be')) {
-          videoId = p.media_url.split('.be/')[1].split('?')[0];
-        } else if (p.media_url.includes('youtube.com')) {
-          const urlObj = new URL(p.media_url);
-          videoId = urlObj.searchParams.get('v') || '';
-        }
-        if (videoId) return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-      } catch {}
-    }
-    // Premium fallback image (Unsplash journalism/news theme)
-    return 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=80';
-  };
-
-  const indexDestacada = publicaciones.findIndex(p => getImageUrl(p) !== '');
-  const destacada = indexDestacada !== -1 ? publicaciones[indexDestacada] : publicaciones[0];
-  const destacadaImage = destacada ? getImageUrl(destacada) : '';
-  const resto = publicaciones.filter((_, idx) => idx !== (indexDestacada !== -1 ? indexDestacada : 0));
-
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-1 p-1 bg-gray-200 h-full overflow-hidden">
+    <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 md:py-16">
       {publicaciones.length === 0 ? (
-        <div className="flex-1 text-center py-20 bg-[#F8F9FA] flex flex-col items-center justify-center">
+        <div className="text-center py-20 bg-white border border-gray-200">
           <h2 className="text-2xl font-black tracking-tight uppercase italic">No hay publicaciones disponibles</h2>
           <p className="text-gray-500 mt-2 font-medium">Explora los diferentes formatos o regresa más tarde.</p>
         </div>
       ) : (
-        <>
-          {/* LEFT: Featured Story */}
-          <div className="md:w-2/3 flex flex-col bg-white overflow-hidden relative group cursor-pointer min-h-[50vh] md:min-h-[600px] h-full">
-            {destacada ? (
-              <Link to={`/publicacion/${destacada.id}`} className="block h-full w-full bg-gray-300 relative">
-                {destacadaImage ? (
-                  <img 
-                    src={destacadaImage} 
-                    alt={destacada.titulo}
-                    className="absolute inset-0 w-full h-full object-cover transition duration-700 group-hover:scale-105 opacity-90"
-                  />
-                ) : (
-                  <div className="absolute inset-0 w-full h-full bg-black/80" />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90"></div>
-                <div className="absolute top-6 left-6">
-                  <span className="bg-[#E63946] text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">Publicación más reciente</span>
-                </div>
-                <div className="absolute bottom-6 md:bottom-10 left-6 md:left-10 right-6 md:right-10">
-                  <h2 className="text-3xl md:text-5xl font-black text-white leading-[1.1] mb-4 tracking-tight uppercase italic group-hover:text-red-400 transition-colors">
-                    {destacada.titulo}
-                  </h2>
-                  <div className="flex items-center gap-4 text-white">
-                    <p className="text-xs md:text-sm font-bold opacity-80 uppercase">Por {destacada.autorNombre}</p>
-                    <span className="h-1 w-1 bg-[#E63946] rounded-full hidden md:block"></span>
-                    <p className="text-xs md:text-sm opacity-60 uppercase tracking-widest hidden md:block">
-                      {formatDistanceToNow(new Date(destacada.fecha_publicacion || destacada.created_at), { addSuffix: true, locale: es })}
-                    </p>
+        <div className="flex flex-col gap-6">
+          <h1 className="text-4xl md:text-5xl font-black text-[#1A1A1A] leading-[1.1] mb-8 tracking-tighter uppercase italic border-b-4 border-black pb-4">
+            Últimas Publicaciones
+          </h1>
+          {publicaciones.map((pub) => (
+            <Link 
+              key={pub.id} 
+              to={`/publicacion/${pub.id}`} 
+              className="group block bg-white p-6 md:p-10 border-2 border-gray-100 hover:border-black hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all duration-300 relative overflow-hidden"
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className={`inline-flex items-center gap-1.5 text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest ${pub.formato === 'video' ? 'bg-black' : pub.formato === 'audio' ? 'bg-blue-600' : 'bg-[#E63946]'}`}>
+                      <FormatoIcon formato={pub.formato} />
+                      {pub.formato}
+                    </span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                      {formatDistanceToNow(new Date(pub.fecha_publicacion || pub.created_at), { addSuffix: true, locale: es })}
+                    </span>
                   </div>
-                  <div className="mt-6 flex gap-2">
-                    <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/30 flex items-center gap-3">
-                      <span className="text-lg leading-none flex items-center gap-2">
-                         <FormatoIcon formato={destacada.formato} /> 
-                         <span className="text-xs text-white font-bold uppercase tracking-wider">{destacada.formato}</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ) : (
-              <div className="w-full h-full bg-gray-200"></div>
-            )}
-          </div>
-
-          {/* RIGHT: Side Feed */}
-          <div className="md:w-1/3 flex flex-col gap-1 overflow-y-auto">
-            {resto.map(pub => (
-              <Link key={pub.id} to={`/publicacion/${pub.id}`} className="flex-1 bg-white p-6 flex flex-col justify-between group min-h-[200px]">
-                <div>
-                  <span className={`inline-block text-white px-2 py-0.5 text-[9px] font-bold uppercase mb-3 tracking-tighter italic ${pub.formato === 'video' ? 'bg-black' : pub.formato === 'audio' ? 'bg-blue-600' : 'bg-[#E63946]'}`}>
-                    {pub.formato}
-                  </span>
-                  <h3 className="text-xl font-bold leading-tight group-hover:text-[#E63946] transition-colors text-[#1A1A1A] line-clamp-3">
+                  
+                  <h2 className="text-2xl md:text-4xl font-black text-[#1A1A1A] leading-[1.1] tracking-tight uppercase italic group-hover:text-[#E63946] transition-colors mb-4 line-clamp-2">
                     {pub.titulo}
-                  </h3>
+                  </h2>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">POR</span>
+                    <span className="text-sm font-bold uppercase text-[#1A1A1A]">{pub.autorNombre}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center mt-4 border-t border-gray-100 pt-4">
-                  <p className="text-[10px] font-bold uppercase text-gray-400">Por {pub.autorNombre}</p>
-                  <p className="text-[10px] font-bold uppercase text-gray-400">
-                     {formatDistanceToNow(new Date(pub.fecha_publicacion || pub.created_at), { addSuffix: false, locale: es })}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </>
+              </div>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );
