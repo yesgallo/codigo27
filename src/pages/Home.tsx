@@ -90,7 +90,8 @@ export const Home = () => {
         if (videoId) return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
       } catch {}
     }
-    return '';
+    // Premium fallback image (Unsplash journalism/news theme)
+    return 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=80';
   };
 
   const indexDestacada = publicaciones.findIndex(p => getImageUrl(p) !== '');
