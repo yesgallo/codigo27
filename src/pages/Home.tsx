@@ -76,8 +76,26 @@ export const Home = () => {
     return <div className="p-8 text-center text-gray-500">Cargando publicaciones...</div>;
   }
 
-  const indexDestacada = publicaciones.findIndex(p => p.imagen_portada && p.imagen_portada.trim() !== '');
+  const getImageUrl = (p: any) => {
+    if (p.imagen_portada && p.imagen_portada.trim() !== '') return p.imagen_portada;
+    if (p.formato === 'video' && p.media_url) {
+      try {
+        let videoId = '';
+        if (p.media_url.includes('youtu.be')) {
+          videoId = p.media_url.split('.be/')[1].split('?')[0];
+        } else if (p.media_url.includes('youtube.com')) {
+          const urlObj = new URL(p.media_url);
+          videoId = urlObj.searchParams.get('v') || '';
+        }
+        if (videoId) return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+      } catch {}
+    }
+    return '';
+  };
+
+  const indexDestacada = publicaciones.findIndex(p => getImageUrl(p) !== '');
   const destacada = indexDestacada !== -1 ? publicaciones[indexDestacada] : publicaciones[0];
+  const destacadaImage = destacada ? getImageUrl(destacada) : '';
   const resto = publicaciones.filter((_, idx) => idx !== (indexDestacada !== -1 ? indexDestacada : 0));
 
   return (
@@ -93,9 +111,9 @@ export const Home = () => {
           <div className="md:w-2/3 flex flex-col bg-white overflow-hidden relative group cursor-pointer min-h-[50vh] md:min-h-[600px] h-full">
             {destacada ? (
               <Link to={`/publicacion/${destacada.id}`} className="block h-full w-full bg-gray-300 relative">
-                {destacada.imagen_portada ? (
+                {destacadaImage ? (
                   <img 
-                    src={destacada.imagen_portada} 
+                    src={destacadaImage} 
                     alt={destacada.titulo}
                     className="absolute inset-0 w-full h-full object-cover transition duration-700 group-hover:scale-105 opacity-90"
                   />
