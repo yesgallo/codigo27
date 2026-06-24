@@ -12,6 +12,7 @@ import { PostDetail } from './pages/PostDetail';
 import { Dashboard } from './pages/Dashboard';
 import { Editor } from './pages/Editor';
 import { AdminPanel } from './pages/AdminPanel';
+import { supabase } from './lib/supabase';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -19,8 +20,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (!loading) return;
-    // Si después de 8 segundos sigue cargando, liberamos la ruta.
-    // AuthContext ya tiene su propio timeout de 6s, esto es defensa extra.
     const t = setTimeout(() => setTimedOut(true), 8000);
     return () => clearTimeout(t);
   }, [loading]);
@@ -39,6 +38,51 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!user) return <Navigate to="/" />;
   return <>{children}</>;
 }
+
+// Ticker dinámico: muestra los títulos de las últimas publicaciones
+const TrendingTicker = () => {
+  const [titulos, setTitulos] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchTitulos = async () => {
+      try {
+        const { data } = await supabase
+          .from('publicaciones')
+          .select('titulo')
+          .eq('estado', 'publicado')
+          .order('fecha_publicacion', { ascending: false })
+          .limit(10);
+        if (data && data.length > 0) {
+          setTitulos(data.map((p: any) => p.titulo));
+        }
+      } catch (_) {}
+    };
+    fetchTitulos();
+  }, []);
+
+  // Si todavía no hay publicaciones, muestra los hashtags por defecto
+  const items = titulos.length > 0 ? titulos : [
+    '#MeEncantaBolivar',
+    '#ClubCiudadDeBolivar',
+    '#CineAvenida',
+    '#Ruta226',
+    '#ParqueLasAcollaradas',
+    '#MaratonBolivar',
+  ];
+
+  return (
+    <div className="flex gap-6 whitespace-nowrap overflow-x-auto no-scrollbar mask-gradient text-gray-500">
+      {items.map((item, i) => (
+        <span
+          key={i}
+          className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors shrink-0"
+        >
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+};
 
 export default function App() {
   return (
@@ -72,15 +116,10 @@ export default function App() {
           
           <footer className="bg-white border-t border-gray-200 flex flex-col shrink-0">
             <div className="py-3 flex gap-4 md:gap-6 items-center overflow-hidden w-full px-4 md:px-8">
-              <span className="text-[10px] font-black uppercase text-[#E63946] whitespace-nowrap hidden sm:inline-block">Lo más buscado en internet:</span>
-              <div className="flex gap-6 whitespace-nowrap overflow-x-auto no-scrollbar mask-gradient text-gray-500">
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#MeEncantaBolivar</span>
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#ClubCiudadDeBolivar</span>
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#CineAvenida</span>
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#Ruta226</span>
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#ParqueLasAcollaradas</span>
-                <span className="text-xs font-medium hover:underline cursor-pointer hover:text-gray-900 transition-colors">#MaratonBolivar</span>
-              </div>
+              <span className="text-[10px] font-black uppercase text-[#E63946] whitespace-nowrap hidden sm:inline-block">
+                Últimas notas:
+              </span>
+              <TrendingTicker />
             </div>
             <div className="py-2 bg-neutral-900 text-center w-full px-4 md:px-8">
                <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest block">
