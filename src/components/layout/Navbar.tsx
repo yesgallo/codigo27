@@ -199,6 +199,18 @@ const LoginModal = ({ onClose }: { onClose: () => void }) => {
 export const Navbar = () => {
   const { user, profile } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setLoggingOut(false);
+      navigate('/');
+    }
+  };
 
   return (
     <>
@@ -258,8 +270,9 @@ export const Navbar = () => {
                 )}
                
                 <button 
-                  onClick={logout}
-                  className="hover:text-[#E63946] transition-colors"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="hover:text-[#E63946] transition-colors disabled:opacity-50"
                   title="Cerrar sesión"
                 >
                   <LogOut className="w-5 h-5" />

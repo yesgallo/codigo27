@@ -21,6 +21,8 @@ export const Editor = () => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [pub, setPub] = useState<Publicacion | null>(null);
 
   const { register, handleSubmit, watch, reset } = useForm<FormData>({
@@ -45,7 +47,6 @@ export const Editor = () => {
             return;
           }
 
-          // Check ownership (client guard)
           if (data.estudiante_id !== user?.id && profile?.rol !== 'admin') {
             navigate('/dashboard');
             return;
@@ -71,11 +72,23 @@ export const Editor = () => {
   }, [id, isNew, navigate, reset, user, profile]);
 
   const onSubmit = async (data: FormData) => {
-    if (!user) return;
+    if (!user) {
+      setSaveError('No estás autenticado. Cerrá sesión, volvé a ingresar e intentá de nuevo.');
+      return;
+    }
+
+    if (!data.titulo.trim()) {
+      setSaveError('El título es obligatorio.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveError('');
+
     try {
       if (isNew) {
         const { error } = await supabase.from('publicaciones').insert({
-          titulo: data.titulo,
+          titulo: data.titulo.trim(),
           formato: data.formato,
           cuerpo: data.formato === 'texto' ? data.cuerpo : '',
           media_url: (data.formato === 'video' || data.formato === 'audio') ? data.media_url : '',
@@ -88,7 +101,7 @@ export const Editor = () => {
         const { error } = await supabase
           .from('publicaciones')
           .update({
-            titulo: data.titulo,
+            titulo: data.titulo.trim(),
             formato: data.formato,
             cuerpo: data.formato === 'texto' ? data.cuerpo : '',
             media_url: (data.formato === 'video' || data.formato === 'audio') ? data.media_url : '',
@@ -101,7 +114,10 @@ export const Editor = () => {
       navigate('/dashboard');
     } catch (e: any) {
       console.error('Error saving:', e);
-      alert('Error al guardar: ' + (e?.message || JSON.stringify(e)));
+      const msg = e?.message || JSON.stringify(e);
+      setSaveError('Error al guardar: ' + msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -127,11 +143,17 @@ export const Editor = () => {
              </div>
            )}
 
+           {saveError && (
+             <div className="mb-6 p-4 bg-red-50 border border-red-300 text-red-700 text-sm font-medium">
+               {saveError}
+             </div>
+           )}
+
            <div className="space-y-8">
               <div>
                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Formato</label>
                  <div className="flex gap-4">
-                    {['texto', 'video', 'audio'].map((f) => (
+                    {(['texto', 'video', 'audio'] as Formato[]).map((f) => (
                       <label key={f} className={`flex-1 flex text-center justify-center cursor-pointer border-2 py-4 font-black uppercase tracking-widest text-xs transition-colors ${formatoWatch === f ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'border-gray-200 hover:border-black text-gray-400'}`}>
                         <input type="radio" value={f} className="sr-only" {...register('formato')} />
                         {f}
@@ -141,7 +163,7 @@ export const Editor = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Título</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Título *</label>
                 <input 
                   {...register('titulo', { required: true })}
                   className="w-full border-b-2 border-gray-200 bg-transparent px-0 py-3 text-2xl font-black tracking-tight placeholder-gray-300 outline-none focus:border-black transition-colors"
@@ -194,10 +216,11 @@ export const Editor = () => {
         <div className="flex justify-end gap-4 mt-8 w-full md:w-auto">
            <button 
              type="submit"
-             className="bg-[#E63946] hover:bg-black text-white px-8 py-4 font-black text-xs uppercase tracking-widest flex items-center gap-3 transition-colors w-full md:w-auto justify-center"
+             disabled={saving}
+             className="bg-[#E63946] hover:bg-black disabled:bg-gray-400 text-white px-8 py-4 font-black text-xs uppercase tracking-widest flex items-center gap-3 transition-colors w-full md:w-auto justify-center"
            >
              <Save className="w-5 h-5" />
-             {isNew ? 'Guardar Borrador' : 'Guardar Cambios'}
+             {saving ? 'Guardando...' : (isNew ? 'Guardar Borrador' : 'Guardar Cambios')}
            </button>
         </div>
       </form>

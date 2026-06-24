@@ -34,7 +34,22 @@ export const registerWithEmail = async (
   return data;
 };
 
+// Limpia tokens de Supabase del localStorage
+const clearSupabaseAuth = () => {
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
+  } catch (_) {}
+};
+
 export const logout = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) console.error('Logout failed', error);
+  // Primero limpiamos el storage local para que la UI responda de inmediato
+  clearSupabaseAuth();
+  try {
+    // scope: 'local' solo limpia la sesión localmente sin requerir red
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch (err) {
+    console.error('Logout error (sesión limpiada localmente):', err);
+  }
 };

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Navbar } from './components/layout/Navbar';
@@ -15,7 +15,27 @@ import { AdminPanel } from './pages/AdminPanel';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div>Cargando...</div>;
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!loading) return;
+    // Si después de 8 segundos sigue cargando, liberamos la ruta.
+    // AuthContext ya tiene su propio timeout de 6s, esto es defensa extra.
+    const t = setTimeout(() => setTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  if (loading && !timedOut) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#E63946] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-500 font-medium uppercase tracking-widest">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) return <Navigate to="/" />;
   return <>{children}</>;
 }
@@ -73,4 +93,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

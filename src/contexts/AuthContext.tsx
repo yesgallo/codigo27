@@ -17,6 +17,15 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
 });
 
+// Limpia tokens viejos/rotos de Supabase del localStorage
+const clearStaleAuth = () => {
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
+  } catch (_) {}
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -25,7 +34,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchOrCreateProfile = async (supabaseUser: User) => {
     try {
-      // Try to fetch existing profile
       const { data, error } = await supabase
         .from('perfiles')
         .select('*')
@@ -42,7 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Profile not found (trigger may have failed) — create it from frontend
       if (error?.code === 'PGRST116') {
         const isAdmin = supabaseUser.email === 'yesicalp@gmail.com';
         const meta = supabaseUser.user_metadata || {};
@@ -71,7 +78,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.error('Error fetching profile:', error);
-      // Fallback for admin if DB fails
       if (supabaseUser.email === 'yesicalp@gmail.com') {
         setProfile({
           id: supabaseUser.id,
@@ -87,20 +93,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        fetchOrCreateProfile(s.user).finally(() => setLoading(false));
-      } else {
+    let settled = false;
+
+    const finishLoading = () => {
+      if (!settled) {
+        settled = true;
         setLoading(false);
       }
-    });
+    };
 
-    // Listen for auth changes
+    // Timeout de seguridad: si getSession() no responde en 6 segundos,
+    // limpiamos el storage y liberamos la app.
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        console.warn('Auth timeout: limpiando sesión vieja y continuando.');
+        clearStaleAuth();
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        finishLoading();
+      }
+    }, 6000);
+
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => {
+        clearTimeout(timeout);
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          fetchOrCreateProfile(s.user).finally(finishLoading);
+        } else {
+          finishLoading();
+        }
+      })
+      .catch((err) => {
+        clearTimeout(timeout);
+        console.error('Error al obtener sesión, limpiando auth:', err);
+        clearStaleAuth();
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        finishLoading();
+      });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
+        clearTimeout(timeout);
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user) {
@@ -108,11 +146,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setProfile(null);
         }
-        setLoading(false);
+        finishLoading();
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
