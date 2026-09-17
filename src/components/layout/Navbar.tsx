@@ -224,7 +224,12 @@ export const Navbar = () => {
                 </span>
                 <span className="text-[10px] text-gray-400 font-medium mt-0.5 tracking-wide">Periodismo con criterio</span>
               </Link>
-              <WeatherWidget />
+              <div className="flex flex-col gap-0.5">
+                <WeatherWidget />
+                <span className="text-[10px] text-gray-500 font-medium capitalize">
+                  {new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}
+                </span>
+              </div>
             </div>
             <div className="hidden md:flex gap-6 text-sm font-bold uppercase tracking-wider text-gray-400">
               <Link to="/" className="hover:text-[#E63946] transition-colors">Inicio</Link>
