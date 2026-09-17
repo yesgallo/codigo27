@@ -76,7 +76,13 @@ export const AdminPanel = () => {
   };
 
   useEffect(() => {
-    if (!user || profile?.rol !== 'admin') return;
+    // Wait until auth is resolved
+    if (user === undefined || profile === undefined) return;
+    // If not admin, don't load data
+    if (!user || profile?.rol !== 'admin') {
+      setLoading(false);
+      return;
+    }
 
     const init = async () => {
       try {
@@ -107,11 +113,13 @@ export const AdminPanel = () => {
     };
   }, [user, profile]);
 
-  if (profile && profile.rol !== 'admin') {
+  // Still waiting for auth context
+  if (loading) return <div className="p-8 text-center">Cargando panel...</div>;
+
+  // Not logged in or not admin → redirect
+  if (!user || profile?.rol !== 'admin') {
     return <Navigate to="/dashboard" />;
   }
-
-  if (loading) return <div className="p-8 text-center">Cargando panel...</div>;
 
   const pendientes = publicaciones.filter(p => p.estado === 'borrador');
   const publicados = publicaciones.filter(p => p.estado === 'publicado');
