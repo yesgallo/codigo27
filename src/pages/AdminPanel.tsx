@@ -5,6 +5,32 @@ import { Publicacion, UserProfile } from '../types';
 import { Link, Navigate } from 'react-router-dom';
 import { Check, AlertCircle, Eye, Database, ArrowLeft, UserCheck, UserX, Trash2 } from 'lucide-react';
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-16">
+          <div className="bg-red-50 border-2 border-[#E63946] p-8">
+            <h2 className="text-xl font-black uppercase text-[#E63946] mb-4">Error en el Panel Admin</h2>
+            <p className="font-mono text-sm bg-white p-4 border border-red-200 text-red-800 break-all whitespace-pre-wrap">
+              {this.state.error.message}
+            </p>
+            <p className="font-mono text-xs text-gray-500 mt-2 break-all whitespace-pre-wrap">
+              {this.state.error.stack}
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const SEED_DATA = [
   {
     titulo: "El Renacimiento de los Huertos Urbanos: Cultivando Sostenibilidad",
@@ -38,7 +64,7 @@ const SEED_DATA = [
   }
 ];
 
-export const AdminPanel = () => {
+const AdminPanelInner = () => {
   const { user, profile, loading: authLoading } = useAuth();
   const [publicaciones, setPublicaciones] = useState<(Publicacion & { autorNombre?: string })[]>([]);
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
@@ -398,3 +424,9 @@ export const AdminPanel = () => {
     </div>
   );
 };
+
+export const AdminPanel = () => (
+  <ErrorBoundary>
+    <AdminPanelInner />
+  </ErrorBoundary>
+);
