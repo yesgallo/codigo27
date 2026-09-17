@@ -39,10 +39,10 @@ const SEED_DATA = [
 ];
 
 export const AdminPanel = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [publicaciones, setPublicaciones] = useState<(Publicacion & { autorNombre?: string })[]>([]);
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [comentarioActivo, setComentarioActivo] = useState<{ id: string, texto: string } | null>(null);
 
   const fetchPublicaciones = async () => {
@@ -76,11 +76,12 @@ export const AdminPanel = () => {
   };
 
   useEffect(() => {
-    // Wait until auth is resolved
-    if (user === undefined || profile === undefined) return;
-    // If not admin, don't load data
+    // Wait for AuthContext to finish resolving the session
+    if (authLoading) return;
+
+    // Not logged in or not admin → no need to load data
     if (!user || profile?.rol !== 'admin') {
-      setLoading(false);
+      setDataLoading(false);
       return;
     }
 
@@ -90,7 +91,7 @@ export const AdminPanel = () => {
       } catch (error) {
         console.error('Error during init:', error);
       } finally {
-        setLoading(false);
+        setDataLoading(false);
       }
     };
     init();
@@ -111,10 +112,19 @@ export const AdminPanel = () => {
       supabase.removeChannel(pubChannel);
       supabase.removeChannel(userChannel);
     };
-  }, [user, profile]);
+  }, [authLoading, user, profile]);
 
-  // Still waiting for auth context
-  if (loading) return <div className="p-8 text-center">Cargando panel...</div>;
+  // AuthContext still resolving session
+  if (authLoading || dataLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#E63946] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-500 font-medium uppercase tracking-widest">Cargando panel...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Not logged in or not admin → redirect
   if (!user || profile?.rol !== 'admin') {
