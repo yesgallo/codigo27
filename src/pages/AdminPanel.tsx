@@ -127,25 +127,38 @@ export const AdminPanel = () => {
     if (error) console.error('Error updating user:', error);
   };
 
-  const handleUpdateEstado = async (id: string, nuevoEstado: 'publicado' | 'observado' | 'borrador', comentario?: string) => {
+  const handleUpdateEstado = async (pubId: string, nuevoEstado: 'publicado' | 'observado' | 'borrador', comentario?: string) => {
     const updateData: any = { estado: nuevoEstado };
-    
+
     if (nuevoEstado === 'publicado') {
       updateData.fecha_publicacion = new Date().toISOString();
     }
-    
-    if (comentario !== undefined) {
+
+    if (nuevoEstado === 'observado' && comentario && profile) {
+      // Obtener historial actual para hacer append
+      const pub = publicaciones.find(p => p.id === pubId);
+      const historialActual = (pub as any)?.historial_observaciones || [];
+      updateData.historial_observaciones = [
+        ...historialActual,
+        {
+          fecha: new Date().toISOString(),
+          docente_id: user?.id || '',
+          docente_nombre: `${profile.nombre} ${profile.apellido}`,
+          comentario,
+        }
+      ];
+      // También mantener comentario_docente para compatibilidad
       updateData.comentario_docente = comentario;
     }
 
     const { error } = await supabase
       .from('publicaciones')
       .update(updateData)
-      .eq('id', id);
+      .eq('id', pubId);
 
     if (error) {
       console.error('Error updating estado:', error);
-    } else if (comentarioActivo?.id === id) {
+    } else if (comentarioActivo?.id === pubId) {
       setComentarioActivo(null);
     }
   };

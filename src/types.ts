@@ -13,6 +13,13 @@ export interface UserProfile {
 export type Formato = 'texto' | 'video' | 'audio';
 export type Estado = 'borrador' | 'publicado' | 'observado';
 
+export interface Observacion {
+  fecha: string;
+  docente_id: string;
+  docente_nombre: string;
+  comentario: string;
+}
+
 export interface Publicacion {
   id: string;
   titulo: string;
@@ -21,7 +28,9 @@ export interface Publicacion {
   media_url?: string;
   imagen_portada?: string;
   estado: Estado;
-  comentario_docente?: string;
+  comentario_docente?: string; // deprecated, use historial_observaciones
+  historial_observaciones?: Observacion[];
+  colaboradores?: string[];
   estudiante_id: string;
   autor_nombre_demo?: string;
   total_reacciones?: number;
