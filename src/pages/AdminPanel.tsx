@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Publicacion, UserProfile } from '../types';
 import { Link, Navigate } from 'react-router-dom';
-import { Check, AlertCircle, Eye, Database, ArrowLeft, UserCheck, UserX, Trash2 } from 'lucide-react';
+import { Check, AlertCircle, Eye, Database, ArrowLeft, UserCheck, UserX, Trash2, Clock } from 'lucide-react';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: any) {
@@ -30,6 +30,159 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
     return this.props.children;
   }
 }
+
+// ── FilaPublicacion: sub-componente con historial y observación ──────────
+type FilaProps = {
+  pub: any;
+  comentarioActivo: { id: string; texto: string } | null;
+  setComentarioActivo: (v: { id: string; texto: string } | null) => void;
+  handleUpdateEstado: (id: string, estado: 'publicado' | 'observado' | 'borrador', comentario?: string) => void;
+  handleDeletePost: (id: string) => void;
+};
+
+const FilaPublicacion = ({ pub, comentarioActivo, setComentarioActivo, handleUpdateEstado, handleDeletePost }: FilaProps) => {
+  const [showHistorial, setShowHistorial] = useState(false);
+  const historial: any[] = pub.historial_observaciones || [];
+
+  const estadoBadge: Record<string, string> = {
+    borrador: 'bg-gray-100 text-gray-600',
+    observado: 'bg-amber-100 text-amber-700',
+    publicado: 'bg-green-100 text-green-700',
+  };
+
+  const esActivo = comentarioActivo?.id === pub.id;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5 mb-4 shadow-sm">
+      {/* Fila principal */}
+      <div className="flex flex-col md:flex-row gap-4 justify-between md:items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pub.formato}</span>
+            <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded ${estadoBadge[pub.estado] || 'bg-gray-100 text-gray-600'}`}>{pub.estado}</span>
+            <span className="text-sm font-medium text-gray-900">{pub.autorNombre}</span>
+          </div>
+          <h3 className="font-bold text-base mb-1 leading-snug">{pub.titulo}</h3>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Link to={`/publicacion/${pub.id}`} className="text-sm text-red-600 hover:underline flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5"/> Ver
+            </Link>
+            <button
+              onClick={() => setShowHistorial(s => !s)}
+              className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+            >
+              <Clock className="w-3.5 h-3.5"/>
+              Historial ({historial.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {pub.estado !== 'publicado' && (
+            <button
+              onClick={() => handleUpdateEstado(pub.id, 'publicado')}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition flex items-center gap-1"
+            >
+              <Check className="w-4 h-4"/> Aprobar
+            </button>
+          )}
+          {/* Observar siempre visible, siempre vacío */}
+          <button
+            onClick={() => setComentarioActivo(esActivo ? null : { id: pub.id, texto: '' })}
+            className={`px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition flex items-center gap-1 ${esActivo ? 'bg-amber-500 text-white' : 'bg-amber-100 hover:bg-amber-200 text-amber-800'}`}
+          >
+            <AlertCircle className="w-4 h-4"/> Observar
+          </button>
+          <button
+            onClick={() => handleDeletePost(pub.id)}
+            className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition flex items-center gap-1"
+          >
+            <Trash2 className="w-4 h-4"/> Eliminar
+          </button>
+        </div>
+      </div>
+
+      {/* Panel de nueva observación */}
+      {esActivo && (
+        <div className="mt-4 bg-amber-50 p-4 rounded-md border border-amber-200">
+          <label className="block text-xs font-black uppercase tracking-widest text-amber-900 mb-2">Nueva Observación:</label>
+          <textarea
+            value={comentarioActivo!.texto}
+            onChange={(e) => setComentarioActivo({ id: pub.id, texto: e.target.value })}
+            className="w-full rounded border border-amber-300 p-2 mb-3 bg-white outline-none text-sm"
+            rows={3}
+            placeholder="Escribí tu corrección o sugerencia..."
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleUpdateEstado(pub.id, 'observado', comentarioActivo!.texto)}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-bold text-xs uppercase tracking-wider transition"
+            >
+              Enviar Observación
+            </button>
+            <button
+              onClick={() => setComentarioActivo(null)}
+              className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-600 px-4 py-2 rounded font-bold text-xs uppercase tracking-wider transition"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Historial de cambios */}
+      {showHistorial && (
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Historial de cambios</p>
+          {historial.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Sin observaciones registradas aún.</p>
+          ) : (
+            <ol className="relative border-l-2 border-gray-200 space-y-4 ml-2">
+              {historial.map((obs: any, i: number) => (
+                <li key={i} className="ml-4">
+                  <span className="absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-amber-400 flex items-center justify-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                  </span>
+                  <div className="bg-amber-50 border border-amber-100 rounded-md p-3">
+                    <div className="flex justify-between items-center mb-1 flex-wrap gap-1">
+                      <span className="text-xs font-black text-amber-800 uppercase tracking-wide">
+                        📝 {obs.docente_nombre || 'Docente'}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(obs.fecha).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700">{obs.comentario}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          {/* Timestamps de la publicación */}
+          <div className="mt-4 flex flex-col gap-1">
+            {pub.created_at && (
+              <p className="text-[10px] text-gray-400">
+                🗓 Creada: {new Date(pub.created_at).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+            {pub.updated_at && pub.updated_at !== pub.created_at && (
+              <p className="text-[10px] text-gray-400">
+                ✏️ Última edición: {new Date(pub.updated_at).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+            {pub.fecha_publicacion && (
+              <p className="text-[10px] text-green-600 font-bold">
+                ✅ Publicada: {new Date(pub.fecha_publicacion).toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SEED_DATA = [
   {
@@ -217,7 +370,7 @@ const AdminPanelInner = () => {
   const handleSeedData = async () => {
     if (!user) return;
     try {
-      setLoading(true);
+      setDataLoading(true);
       const inserts = SEED_DATA.map(item => ({
         titulo: item.titulo,
         cuerpo: item.cuerpo,
@@ -232,68 +385,20 @@ const AdminPanelInner = () => {
       const { error } = await supabase.from('publicaciones').insert(inserts);
       if (error) console.error('Error seeding:', error);
     } finally {
-      setLoading(false);
+      setDataLoading(false);
       fetchPublicaciones();
     }
   };
 
   const renderFila = (pub: Publicacion & { autorNombre?: string }) => (
-    <div key={pub.id} className="bg-white border text-gray-800 border-gray-200 rounded-lg p-5 mb-4 shadow-sm flex flex-col md:flex-row gap-4 justify-between md:items-center">
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-           <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pub.formato}</span>
-           <span className="text-sm font-medium text-gray-900">{pub.autorNombre}</span>
-        </div>
-        <h3 className="font-bold text-lg mb-1">{pub.titulo}</h3>
-        <Link to={`/publicacion/${pub.id}`} className="text-sm text-red-600 hover:underline flex items-center gap-1">
-          <Eye className="w-4 h-4"/> Ver Previsualización
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-2 shrink-0">
-        {pub.estado !== 'publicado' && (
-           <button 
-             onClick={() => handleUpdateEstado(pub.id, 'publicado')}
-             className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition flex items-center gap-1"
-           >
-             <Check className="w-4 h-4"/> Aprobar
-           </button>
-        )}
-        
-        {pub.estado !== 'observado' && (
-          <button 
-             onClick={() => setComentarioActivo(comentarioActivo?.id === pub.id ? null : { id: pub.id, texto: pub.comentario_docente || '' })}
-             className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition flex items-center gap-1"
-           >
-             <AlertCircle className="w-4 h-4"/> Observar
-           </button>
-        )}
-        <button 
-           onClick={() => handleDeletePost(pub.id)}
-           className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition ml-2 flex items-center gap-1"
-         >
-           <Trash2 className="w-4 h-4"/> Eliminar
-         </button>
-      </div>
-
-      {comentarioActivo?.id === pub.id && (
-         <div className="w-full mt-4 bg-amber-50 p-4 rounded-md border border-amber-200">
-            <label className="block text-sm font-semibold text-amber-900 mb-2">Comentario de Revisión:</label>
-            <textarea 
-               value={comentarioActivo.texto}
-               onChange={(e) => setComentarioActivo({ ...comentarioActivo, texto: e.target.value })}
-               className="w-full rounded border border-amber-300 p-2 mb-3 bg-white outline-none"
-               rows={3}
-            />
-            <button 
-              onClick={() => handleUpdateEstado(pub.id, 'observado', comentarioActivo.texto)}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium text-sm transition"
-            >
-              Enviar Observación
-            </button>
-         </div>
-      )}
-    </div>
+    <FilaPublicacion
+      key={pub.id}
+      pub={pub}
+      comentarioActivo={comentarioActivo}
+      setComentarioActivo={setComentarioActivo}
+      handleUpdateEstado={handleUpdateEstado}
+      handleDeletePost={handleDeletePost}
+    />
   );
 
   const topPublicaciones = [...publicados].sort((a,b) => (b.total_reacciones || 0) - (a.total_reacciones || 0)).slice(0, 3);
