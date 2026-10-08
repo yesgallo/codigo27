@@ -104,7 +104,7 @@ export const PostDetail = () => {
         </div>
       </header>
 
-      {pub.imagen_portada && pub.formato === 'texto' && (
+      {pub.imagen_portada && (
         <figure className="mb-12">
           <img src={pub.imagen_portada} alt={pub.titulo} className="w-full object-cover max-h-[600px]" />
         </figure>
