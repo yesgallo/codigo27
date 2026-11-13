@@ -129,6 +129,19 @@ export const Editor = () => {
   // Subir archivo de audio o video
   const handleMediaUpload = useCallback(async (file: File) => {
     if (!user) return;
+
+    // Validación preventiva de tamaño: Supabase Free Plan limita a 50 MB por archivo
+    const MAX_MB = 50;
+    const sizeInMB = file.size / (1024 * 1024);
+    if (sizeInMB > MAX_MB) {
+      setSaveError(
+        `El archivo "${file.name}" pesa ${sizeInMB.toFixed(1)} MB y supera el límite de subida directa (máximo ${MAX_MB} MB en el plan gratuito de la base de datos). ` +
+        `Para videos de ${sizeInMB.toFixed(0)} MB, te recomendamos subirlo a YouTube (puede estar en modo "Oculto"), Vimeo o Google Drive y pegar el enlace en el casillero correspondiente, o comprimir el archivo a menos de 50 MB.`
+      );
+      if (mediaInputRef.current) mediaInputRef.current.value = '';
+      return;
+    }
+
     setUploadingMedia(true); setSaveError('');
     try {
       const ext = file.name.split('.').pop();
@@ -140,7 +153,10 @@ export const Editor = () => {
       setMediaUrl(data.publicUrl);
     } catch (e: any) {
       setSaveError('Error al subir archivo: ' + (e?.message || ''));
-    } finally { setUploadingMedia(false); }
+    } finally {
+      setUploadingMedia(false);
+      if (mediaInputRef.current) mediaInputRef.current.value = '';
+    }
   }, [user, formato]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -251,22 +267,34 @@ export const Editor = () => {
                   {formato === 'video' ? '🎬 Video' : '🎵 Audio'}
                 </label>
                 <div className="space-y-3">
-                  {/* Subir archivo */}
+                  {/* Subir archivo o enlace */}
                   <div className="flex gap-3 items-center flex-wrap">
                     <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={uploadingMedia}
                       className="flex items-center gap-2 bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white px-5 py-2.5 text-xs font-black uppercase tracking-widest transition-colors">
                       {formato === 'video' ? <Video className="w-4 h-4" /> : <Music className="w-4 h-4" />}
-                      {uploadingMedia ? 'Subiendo...' : 'Subir archivo'}
+                      {uploadingMedia ? 'Subiendo archivo...' : 'Subir archivo'}
                     </button>
                     <span className="text-gray-400 text-xs font-bold uppercase">o</span>
                     <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
                       className="flex-1 min-w-[200px] border-b-2 border-gray-200 bg-transparent px-0 py-2 text-sm font-medium placeholder-gray-300 outline-none focus:border-black transition-colors"
-                      placeholder={formato === 'video' ? 'https://youtube.com/watch?v=...' : 'https://open.spotify.com/...'} />
+                      placeholder={formato === 'video' ? 'Enlace de YouTube, Google Drive o Vimeo...' : 'Enlace de Spotify o audio web...'} />
                   </div>
                   <input ref={mediaInputRef} type="file"
                     accept={formato === 'video' ? 'video/*' : 'audio/*'}
                     className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleMediaUpload(f); }} />
+
+                  {/* Mensaje de ayuda para archivos pesados */}
+                  {formato === 'video' && (
+                    <div className="bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 leading-relaxed space-y-1">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <span>💡</span> Límite de subida directa: hasta 50 MB por archivo.
+                      </p>
+                      <p className="text-amber-800">
+                        Si tu video pesa más (ej. 100 MB, 600 MB), subilo a <strong>YouTube</strong> (podés ponerlo en modo <em>"Oculto / No listado"</em> para que no sea público) o a <strong>Google Drive / Vimeo</strong> y pegá el enlace arriba. Se reproducirá directamente en la publicación sin ocupar espacio en la base de datos.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Vista previa */}
                   {mediaUrl && (

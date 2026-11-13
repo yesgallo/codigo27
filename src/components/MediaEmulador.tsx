@@ -6,6 +6,8 @@ interface MediaEmuladorProps {
 }
 
 const isYouTube = (url: string) => url.includes('youtube.com') || url.includes('youtu.be');
+const isVimeo = (url: string) => url.includes('vimeo.com');
+const isGoogleDrive = (url: string) => url.includes('drive.google.com/file/d/');
 const isSpotify = (url: string) => url.includes('spotify.com');
 const isDirectVideo = (url: string) => /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
 const isDirectAudio = (url: string) => /\.(mp3|wav|ogg|aac|m4a|flac)(\?|$)/i.test(url);
@@ -35,6 +37,50 @@ export const MediaEmulador: React.FC<MediaEmuladorProps> = ({ url, formato }) =>
         />
       </div>
     );
+  }
+
+  // ── Google Drive embed ─────────────────────────────────────────────────
+  if (isGoogleDrive(url)) {
+    try {
+      const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      const driveId = match ? match[1] : '';
+      if (driveId) {
+        return (
+          <div className="relative w-full pb-[56.25%] h-0 rounded-lg overflow-hidden bg-black">
+            <iframe
+              src={`https://drive.google.com/file/d/${driveId}/preview`}
+              allow="autoplay"
+              allowFullScreen
+              className="absolute top-0 left-0 w-full h-full border-0"
+            />
+          </div>
+        );
+      }
+    } catch {
+      return <div className="p-4 bg-gray-100 text-red-600 rounded text-sm">URL de Google Drive inválida</div>;
+    }
+  }
+
+  // ── Vimeo embed ────────────────────────────────────────────────────────
+  if (isVimeo(url)) {
+    try {
+      const match = url.match(/vimeo\.com\/(\d+)/);
+      const vimeoId = match ? match[1] : '';
+      if (vimeoId) {
+        return (
+          <div className="relative w-full pb-[56.25%] h-0 rounded-lg overflow-hidden bg-black">
+            <iframe
+              src={`https://player.vimeo.com/video/${vimeoId}`}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="absolute top-0 left-0 w-full h-full border-0"
+            />
+          </div>
+        );
+      }
+    } catch {
+      return <div className="p-4 bg-gray-100 text-red-600 rounded text-sm">URL de Vimeo inválida</div>;
+    }
   }
 
   // ── Spotify embed ──────────────────────────────────────────────────────
