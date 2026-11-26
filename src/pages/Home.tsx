@@ -96,12 +96,17 @@ export const Home = () => {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-2 mb-4 flex-wrap">
                     <span className={`inline-flex items-center gap-1.5 text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest ${pub.formato === 'video' ? 'bg-black' : pub.formato === 'audio' ? 'bg-blue-600' : 'bg-[#E63946]'}`}>
                       <FormatoIcon formato={pub.formato} />
-                      {pub.formato}
+                      {pub.formato === 'audio' ? 'Podcast' : pub.formato}
                     </span>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    {pub.genero && (
+                      <span className="inline-flex items-center bg-gray-100 text-gray-800 border border-gray-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
+                        {pub.genero}
+                      </span>
+                    )}
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">
                       {formatDistanceToNow(new Date(pub.fecha_publicacion || pub.created_at), { addSuffix: true, locale: es })}
                     </span>
                   </div>

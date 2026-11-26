@@ -234,7 +234,7 @@ export const Navbar = () => {
             <div className="hidden md:flex gap-6 text-sm font-bold uppercase tracking-wider text-gray-400">
               <Link to="/" className="hover:text-[#E63946] transition-colors">Inicio</Link>
               <Link to="/?formato=texto" className="hover:text-[#E63946] transition-colors">Texto</Link>
-              <Link to="/?formato=audio" className="hover:text-[#E63946] transition-colors">Audio</Link>
+              <Link to="/?formato=audio" className="hover:text-[#E63946] transition-colors">Podcast</Link>
               <Link to="/?formato=video" className="hover:text-[#E63946] transition-colors">Video</Link>
             </div>
           </div>

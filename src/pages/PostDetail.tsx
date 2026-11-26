@@ -63,10 +63,15 @@ export const PostDetail = () => {
       </Link>
 
       <header className="mb-10 text-center">
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center items-center gap-2 mb-6 flex-wrap">
           <span className={`inline-block text-white px-3 py-1 text-xs font-bold uppercase tracking-widest italic ${pub.formato === 'video' ? 'bg-black' : pub.formato === 'audio' ? 'bg-blue-600' : 'bg-[#E63946]'}`}>
-            {pub.formato}
+            {pub.formato === 'audio' ? 'Podcast' : pub.formato}
           </span>
+          {pub.genero && (
+            <span className="inline-block bg-[#1A1A1A] text-white px-3 py-1 text-xs font-bold uppercase tracking-widest italic">
+              {pub.genero}
+            </span>
+          )}
         </div>
         <h1 className="text-4xl md:text-6xl font-black text-[#1A1A1A] leading-[1.1] mb-8 tracking-tighter uppercase italic">
           {pub.titulo}

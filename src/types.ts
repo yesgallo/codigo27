@@ -13,6 +13,16 @@ export interface UserProfile {
 export type Formato = 'texto' | 'video' | 'audio';
 export type Estado = 'borrador' | 'publicado' | 'observado';
 
+export type Genero = 'Editorial' | 'Columna de opinión' | 'Crónica' | 'Crítica' | 'Perfil' | 'Ensayo';
+export const GENEROS: Genero[] = [
+  'Editorial',
+  'Columna de opinión',
+  'Crónica',
+  'Crítica',
+  'Perfil',
+  'Ensayo',
+];
+
 export interface Observacion {
   fecha: string;
   docente_id: string;
@@ -25,6 +35,7 @@ export interface Publicacion {
   titulo: string;
   cuerpo?: string;
   formato: Formato;
+  genero?: Genero | string;
   media_url?: string;
   imagen_portada?: string;
   estado: Estado;

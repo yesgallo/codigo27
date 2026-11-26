@@ -131,7 +131,7 @@ export const MediaEmulador: React.FC<MediaEmuladorProps> = ({ url, formato }) =>
               <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
             </svg>
           </div>
-          <span className="text-white text-sm font-bold uppercase tracking-widest">Audio</span>
+          <span className="text-white text-sm font-bold uppercase tracking-widest">Podcast</span>
         </div>
         <audio controls className="w-full" preload="metadata">
           <source src={url} />

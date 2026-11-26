@@ -165,9 +165,14 @@ export const Dashboard = () => {
                 <div className="block hover:bg-gray-50 transition p-6 md:p-8 border-b border-gray-100 last:border-0 relative">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <StatusBadge estado={pub.estado} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#E63946]">{pub.formato}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#E63946]">{pub.formato === 'audio' ? 'podcast' : pub.formato}</span>
+                        {pub.genero && (
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                            {pub.genero}
+                          </span>
+                        )}
                         {pub.estado === 'publicado' && (
                           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 border-l border-gray-200 pl-3">
                             {pub.fecha_publicacion ? new Date(pub.fecha_publicacion).toLocaleDateString('es-AR') : ''}

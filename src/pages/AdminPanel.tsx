@@ -58,7 +58,10 @@ const FilaPublicacion = ({ pub, comentarioActivo, setComentarioActivo, handleUpd
       <div className="flex flex-col md:flex-row gap-4 justify-between md:items-start">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pub.formato}</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pub.formato === 'audio' ? 'Podcast' : pub.formato}</span>
+            {pub.genero && (
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-700 bg-gray-200 px-2 py-0.5 rounded">{pub.genero}</span>
+            )}
             <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded ${estadoBadge[pub.estado] || 'bg-gray-100 text-gray-600'}`}>{pub.estado}</span>
             <span className="text-sm font-medium text-gray-900">{pub.autorNombre}</span>
           </div>
@@ -498,7 +501,7 @@ const AdminPanelInner = () => {
                       <span className="font-bold">{publicaciones.filter(p => p.formato === 'video').length}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm mt-1">
-                      <span>Audio</span>
+                      <span>Podcast</span>
                       <span className="font-bold">{publicaciones.filter(p => p.formato === 'audio').length}</span>
                     </div>
                  </div>

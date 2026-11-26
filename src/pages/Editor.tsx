@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Formato, Publicacion, UserProfile } from '../types';
+import { Formato, Genero, GENEROS, Publicacion, UserProfile } from '../types';
 import { ArrowLeft, Save, CheckCircle, Bold, Italic, Highlighter, Upload, X, Users, Music, Video } from 'lucide-react';
 import { MediaEmulador } from '../components/MediaEmulador';
 
@@ -71,6 +71,7 @@ export const Editor = () => {
   // Campos del formulario
   const [titulo, setTitulo] = useState('');
   const [formato, setFormato] = useState<Formato>('texto');
+  const [genero, setGenero] = useState<string>('');
   const [cuerpo, setCuerpo] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [imagenPortada, setImagenPortada] = useState('');
@@ -100,6 +101,7 @@ export const Editor = () => {
           setPub(data as Publicacion);
           setTitulo(data.titulo || '');
           setFormato(data.formato || 'texto');
+          setGenero(data.genero || '');
           setCuerpo(data.cuerpo || '');
           setMediaUrl(data.media_url || '');
           setImagenPortada(data.imagen_portada || '');
@@ -166,7 +168,9 @@ export const Editor = () => {
     setSaving(true); setSaveError(''); setSaved(false);
 
     const payload: any = {
-      titulo: titulo.trim(), formato,
+      titulo: titulo.trim(),
+      formato,
+      genero: genero || null,
       cuerpo: formato === 'texto' ? cuerpo : '',
       media_url: formato !== 'texto' ? mediaUrl : '',
       imagen_portada: imagenPortada,
@@ -237,8 +241,40 @@ export const Editor = () => {
                 {(['texto', 'video', 'audio'] as Formato[]).map(f => (
                   <label key={f} className={`flex-1 flex justify-center cursor-pointer border-2 py-3 font-black uppercase tracking-widest text-xs transition-colors ${formato === f ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'border-gray-200 hover:border-black text-gray-400'}`}>
                     <input type="radio" value={f} className="sr-only" checked={formato === f} onChange={() => { setFormato(f); setMediaUrl(''); }} />
-                    {f}
+                    {f === 'audio' ? 'podcast' : f}
                   </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Género Periodístico */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">Género</label>
+                {genero && (
+                  <button
+                    type="button"
+                    onClick={() => setGenero('')}
+                    className="text-[10px] text-gray-400 hover:text-black uppercase font-bold tracking-wider"
+                  >
+                    Quitar género
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                {GENEROS.map(g => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGenero(genero === g ? '' : g)}
+                    className={`px-3 py-2.5 text-xs font-bold uppercase tracking-wider border-2 transition-all text-center ${
+                      genero === g
+                        ? 'bg-[#E63946] border-[#E63946] text-white shadow-sm'
+                        : 'border-gray-200 text-gray-700 hover:border-black bg-white'
+                    }`}
+                  >
+                    {g}
+                  </button>
                 ))}
               </div>
             </div>
@@ -260,11 +296,11 @@ export const Editor = () => {
               </div>
             )}
 
-            {/* Media: video o audio */}
+            {/* Media: video o podcast */}
             {(formato === 'video' || formato === 'audio') && (
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">
-                  {formato === 'video' ? '🎬 Video' : '🎵 Audio'}
+                  {formato === 'video' ? '🎬 Video' : '🎙️ Podcast'}
                 </label>
                 <div className="space-y-3">
                   {/* Subir archivo o enlace */}
@@ -277,7 +313,7 @@ export const Editor = () => {
                     <span className="text-gray-400 text-xs font-bold uppercase">o</span>
                     <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
                       className="flex-1 min-w-[200px] border-b-2 border-gray-200 bg-transparent px-0 py-2 text-sm font-medium placeholder-gray-300 outline-none focus:border-black transition-colors"
-                      placeholder={formato === 'video' ? 'Enlace de YouTube, Google Drive o Vimeo...' : 'Enlace de Spotify o audio web...'} />
+                      placeholder={formato === 'video' ? 'Enlace de YouTube, Google Drive o Vimeo...' : 'Enlace de Spotify, iVoox o podcast web...'} />
                   </div>
                   <input ref={mediaInputRef} type="file"
                     accept={formato === 'video' ? 'video/*' : 'audio/*'}
